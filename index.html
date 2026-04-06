@@ -908,90 +908,30 @@ body{font-family:'Poppins',sans-serif!important;background:#fdf0f7;min-height:10
       + '</td></tr></table></td></tr></table></body></html>';
   }
 
-  function doSendEmail(name, email) {
+    function doSendEmail(name, email) {
     var btn = document.getElementById('btn-dl');
     if (btn) { btn.textContent = 'Sending...'; btn.disabled = true; }
 
-    // Step 1: Send notification email via GET (proven reliable)
     var reportText = (s1 && s1.report_text) || '';
     if (!reportText) {
       var content = document.getElementById('report-content');
       if (content) reportText = content.innerText || content.textContent || '';
     }
 
-    var url = SHEETS_URL
-      + '?action=send_report'
-      + '&email=' + encodeURIComponent(email)
-      + '&name=' + encodeURIComponent(name || '')
+    // Call Cloudflare Worker — works on ALL devices
+    var workerUrl = 'https://baseline-ai.karenmichell0412.workers.dev'
+      + '?email='    + encodeURIComponent(email)
+      + '&name='     + encodeURIComponent(name || '')
       + '&concerns=' + encodeURIComponent((s1 && s1.concerns) || '')
-      + '&cluster=' + encodeURIComponent((s1 && s1.cluster) || '')
-      + '&wellbeing=' + encodeURIComponent((s1 && s1.wellbeing_score) || '')
-      + '&report=' + encodeURIComponent(reportText.substring(0, 1500));
+      + '&cluster='  + encodeURIComponent((s1 && s1.cluster) || '')
+      + '&wellbeing='+ encodeURIComponent((s1 && s1.wellbeing_score) || '')
+      + '&report='   + encodeURIComponent(reportText.substring(0, 1500));
 
-    // Call Resend API directly — works on all devices
-    var reportParam = reportText.substring(0, 1500);
-    var sectionsHTML = buildSectionsHTML(reportParam);
+    fetch(workerUrl)
+      .then(function(r) { return r.json(); })
+      .then(function(d) { console.log('Email result:', d); })
+      .catch(function(e) { console.log('Email error:', e); });
 
-    var emailHTML = buildEmailHTML(name, email, (s1&&s1.concerns)||'', (s1&&s1.cluster)||'', (s1&&s1.wellbeing_score)||'', sectionsHTML);
-
-    fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        'Authorization': 'Bearer re_TcXSEVSx_9RqdXy2arrtL3JpifMi65viz',
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        from: 'Baseline AI <onboarding@resend.dev>',
-        to: email,
-        subject: 'Your Baseline Health Snapshot - ' + name,
-        html: emailHTML
-      })
-    }).then(function(r){ return r.json(); })
-      .then(function(d){ console.log('Resend:', d); })
-      .catch(function(e){ console.log('Resend error:', e); });
-
-    // Step 2: Send full HTML for PDF generation via POST (2 seconds later)
-    setTimeout(function() {
-      var content = document.getElementById('report-content');
-      if (!content) return;
-      var clone = content.cloneNode(true);
-      clone.querySelectorAll('button,.no-print').forEach(function(b){ b.remove(); });
-      var date = new Date().toLocaleDateString('en-MY',{day:'numeric',month:'long',year:'numeric'});
-
-      var reportHTML = '<!DOCTYPE html><html><head><meta charset="UTF-8"/>'
-        + '<style>*{box-sizing:border-box;margin:0;padding:0;-webkit-print-color-adjust:exact;print-color-adjust:exact}'
-        + 'body{font-family:Arial,sans-serif;background:#fff;padding:20px}'
-        + '.hdr{background:#f11994;padding:24px 28px;border-radius:12px;margin-bottom:20px}'
-        + '.logo{font-size:20px;font-weight:700;color:#fff;margin-bottom:4px}'
-        + '.sub{font-size:11px;color:rgba(255,255,255,0.85);margin-bottom:12px}'
-        + '.pills{display:flex;gap:6px;flex-wrap:wrap}'
-        + '.pill{background:rgba(255,255,255,0.2);color:#fff;font-size:9px;font-weight:600;padding:3px 10px;border-radius:99px}'
-        + '.disc{background:#fff1f8;border:1px solid #fce0f0;border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:10px;color:#a0003f;line-height:1.6}'
-        + '.ftr{margin-top:24px;padding:12px 0;border-top:0.5px solid #f0e0ec;text-align:center;font-size:9px;color:#aaa;line-height:1.8}'
-        + '</style></head><body>'
-        + '<div class="hdr"><div class="logo">Baseline AI</div>'
-        + '<div class="sub">Hormonal Health Snapshot</div>'
-        + '<div class="pills"><span class="pill">' + name + '</span>'
-        + '<span class="pill">' + date + '</span>'
-        + '<span class="pill">Predictive Report</span></div></div>'
-        + '<div class="disc">Predictive snapshot — not a medical diagnosis. Confirm with a licensed Baseline practitioner at baselinemy.com.</div>'
-        + clone.innerHTML
-        + '<div class="ftr">Baseline AI · baselinemy.com · © 2026 Sante Solutions · For ' + name + ' only</div>'
-        + '</body></html>';
-
-      // Send via XHR POST
-      var xhr = new XMLHttpRequest();
-      xhr.open('POST', SHEETS_URL, true);
-      xhr.setRequestHeader('Content-Type', 'text/plain');
-      xhr.send(JSON.stringify({
-        action: 'send_pdf',
-        email: email,
-        name: name,
-        html: btoa(unescape(encodeURIComponent(reportHTML)))
-      }));
-    }, 2000);
-
-    // Show success
     setTimeout(function() {
       var btn2 = document.getElementById('btn-dl');
       if (btn2) {
